@@ -3,13 +3,17 @@ package com.wechat.auto.service;
 import android.accessibilityservice.AccessibilityService;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 微信无障碍服务
@@ -103,6 +107,26 @@ public class WeChatAccessibilityService extends AccessibilityService {
     }
 
     /**
+     * 同步通讯录
+     */
+    public void syncContacts() {
+        Log.d(TAG, "开始同步通讯录");
+
+        // 启动微信
+        launchWeChat();
+
+        // 延迟2秒后点击通讯录
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            clickContactsTab();
+        }, 2000);
+
+        // 延迟4秒后读取通讯录
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            readContactsList();
+        }, 4000);
+    }
+
+    /**
      * 启动微信应用
      */
     private void launchWeChat() {
@@ -170,6 +194,105 @@ public class WeChatAccessibilityService extends AccessibilityService {
         }
 
         return null;
+    }
+
+    /**
+     * 读取通讯录好友列表
+     */
+    private void readContactsList() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找所有好友昵称节点 (resource-id: com.tencent.mm:id/kbq)
+            List<AccessibilityNodeInfo> friendNodes = rootNode.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/kbq");
+
+            if (friendNodes == null || friendNodes.isEmpty()) {
+                Log.w(TAG, "未找到好友节点");
+                return;
+            }
+
+            Log.d(TAG, "找到 " + friendNodes.size() + " 个好友节点");
+
+            // 提取好友昵称
+            List<String> friends = new ArrayList<>();
+            for (AccessibilityNodeInfo node : friendNodes) {
+                CharSequence text = node.getText();
+                if (text != null && text.length() > 0) {
+                    String nickname = text.toString();
+
+                    // 过滤掉特殊项
+                    if (!isSpecialItem(nickname)) {
+                        friends.add(nickname);
+                        Log.d(TAG, "好友: " + nickname);
+                    }
+                }
+            }
+
+            Log.d(TAG, "总共找到 " + friends.size() + " 个真实好友");
+
+            // 发送广播通知MainActivity
+            sendFriendsBroadcast(friends);
+
+        } catch (Exception e) {
+            Log.e(TAG, "读取通讯录失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 发送好友列表广播并保存到SharedPreferences
+     */
+    private void sendFriendsBroadcast(List<String> friends) {
+        // 保存到SharedPreferences
+        saveFriendsToPrefs(friends);
+
+        // 发送广播
+        Intent intent = new Intent("com.wechat.auto.FRIENDS_SYNCED");
+        intent.putStringArrayListExtra("friends", new ArrayList<>(friends));
+        intent.setPackage(getPackageName()); // 限制只发送给本应用
+        sendBroadcast(intent);
+        Log.d(TAG, "已发送好友列表广播并保存到SharedPreferences");
+    }
+
+    /**
+     * 保存好友列表到SharedPreferences
+     */
+    private void saveFriendsToPrefs(List<String> friends) {
+        SharedPreferences prefs = getSharedPreferences("WeChatAutoPrefs", MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+
+        Set<String> friendsSet = new HashSet<>(friends);
+        editor.putStringSet("friends_list", friendsSet);
+        editor.putLong("sync_time", System.currentTimeMillis());
+        editor.apply();
+
+        Log.d(TAG, "好友列表已保存到SharedPreferences: " + friends.size() + " 位好友");
+    }
+
+    /**
+     * 判断是否是特殊项(非真实好友)
+     */
+    private boolean isSpecialItem(String text) {
+        String[] specialItems = {
+            "新的朋友",
+            "仅聊天的朋友",
+            "群聊",
+            "标签",
+            "服务号",
+            "我的企业及企业联系人",
+            "企业微信联系人"
+        };
+
+        for (String item : specialItems) {
+            if (item.equals(text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

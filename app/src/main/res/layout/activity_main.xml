@@ -1,75 +1,192 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:gravity="center_horizontal">
+    android:background="#F5F5F5">
 
-    <!-- 应用标题 -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginTop="32dp"
-        android:layout_marginBottom="32dp" />
-
-    <!-- 服务状态显示 -->
-    <TextView
-        android:id="@+id/tv_service_status"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/service_status_checking"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:background="@android:color/darker_gray"
-        android:textColor="@android:color/white"
-        android:layout_marginBottom="24dp" />
+        android:orientation="vertical"
+        android:padding="20dp">
 
-    <!-- 开启无障碍服务按钮 -->
-    <Button
-        android:id="@+id/btn_enable_accessibility"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/enable_accessibility_service"
-        android:layout_marginBottom="12dp" />
+        <!-- 顶部标题区域 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="24dp"
+            android:layout_marginBottom="20dp"
+            android:elevation="2dp">
 
-    <!-- 开启悬浮窗权限按钮 -->
-    <Button
-        android:id="@+id/btn_enable_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/enable_overlay_permission"
-        android:layout_marginBottom="24dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="8dp" />
 
-    <!-- 启动服务按钮 -->
-    <Button
-        android:id="@+id/btn_start_service"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/start_auto_task"
-        android:backgroundTint="@android:color/holo_green_dark"
-        android:layout_marginBottom="12dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="智能私域运营助手"
+                android:textSize="14sp"
+                android:textColor="#666666" />
 
-    <!-- 停止服务按钮 -->
-    <Button
-        android:id="@+id/btn_stop_service"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/stop_auto_task"
-        android:backgroundTint="@android:color/holo_red_dark" />
+        </LinearLayout>
 
-    <!-- 说明文字 -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/usage_instruction"
-        android:textSize="14sp"
-        android:textColor="@android:color/darker_gray"
-        android:layout_marginTop="32dp"
-        android:gravity="center" />
+        <!-- 任务控制卡片 (最常用,放在最上面) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
 
-</LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🚀 任务控制"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btn_start_service"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:text="@string/start_auto_task"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:backgroundTint="#4CAF50"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_stop_service"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/stop_auto_task"
+                android:textSize="15sp"
+                android:backgroundTint="#F44336" />
+
+        </LinearLayout>
+
+        <!-- 通讯录管理卡片 (第二常用) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👥 通讯录管理"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/tv_friend_count"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="暂无好友数据"
+                android:textSize="14sp"
+                android:textColor="#666666"
+                android:padding="12dp"
+                android:background="#F8F8F8"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_sync_contacts"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="🔄 同步通讯录"
+                android:textSize="15sp"
+                android:backgroundTint="#FF9800" />
+
+        </LinearLayout>
+
+        <!-- 服务状态卡片 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📊 服务状态"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/tv_service_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/service_status_checking"
+                android:textSize="14sp"
+                android:padding="12dp"
+                android:background="#F0F0F0"
+                android:textColor="#333333" />
+
+        </LinearLayout>
+
+        <!-- 权限配置卡片 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:elevation="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙️ 权限配置"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btn_enable_accessibility"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/enable_accessibility_service"
+                android:textSize="15sp"
+                android:backgroundTint="#4CAF50"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_enable_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/enable_overlay_permission"
+                android:textSize="15sp"
+                android:backgroundTint="#2196F3"
+                android:layout_marginBottom="0dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>
 

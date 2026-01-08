@@ -37,6 +37,11 @@
             </intent-filter>
         </activity>
 
+        <!-- 任务配置Activity -->
+        <activity
+            android:name=".TaskConfigActivity"
+            android:exported="false" />
+
         <!-- 无障碍服务 -->
         <service
             android:name=".service.WeChatAccessibilityService"

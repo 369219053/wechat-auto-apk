@@ -8,7 +8,7 @@
     <!-- 按钮文字 -->
     <string name="enable_accessibility_service">开启无障碍服务</string>
     <string name="enable_overlay_permission">开启悬浮窗权限</string>
-    <string name="start_auto_task">启动自动化任务</string>
+    <string name="start_auto_task">配置自动化任务</string>
     <string name="stop_auto_task">停止自动化任务</string>
     
     <!-- 说明文字 -->

@@ -1,6 +1,10 @@
 package com.wechat.auto;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
@@ -11,6 +15,9 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.wechat.auto.service.WeChatAccessibilityService;
 import com.wechat.auto.utils.PermissionHelper;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * 主Activity - 应用入口
@@ -23,12 +30,20 @@ import com.wechat.auto.utils.PermissionHelper;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
+    public static final String ACTION_FRIENDS_SYNCED = "com.wechat.auto.FRIENDS_SYNCED";
+    public static final String EXTRA_FRIENDS = "friends";
+    private static final String PREFS_NAME = "WeChatAutoPrefs";
+    private static final String KEY_FRIENDS = "friends_list";
 
     private TextView tvServiceStatus;
     private Button btnEnableAccessibility;
     private Button btnEnableOverlay;
     private Button btnStartService;
     private Button btnStopService;
+    private Button btnSyncContacts;
+    private TextView tvFriendCount;
+
+    private BroadcastReceiver friendsReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +52,8 @@ public class MainActivity extends AppCompatActivity {
 
         initViews();
         setupListeners();
+        setupBroadcastReceiver();
+        loadFriendsFromPrefs();
         updateServiceStatus();
     }
 
@@ -44,6 +61,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         updateServiceStatus();
+        // 每次回到前台时重新加载好友列表
+        loadFriendsFromPrefs();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (friendsReceiver != null) {
+            unregisterReceiver(friendsReceiver);
+        }
     }
 
     /**
@@ -55,6 +82,8 @@ public class MainActivity extends AppCompatActivity {
         btnEnableOverlay = findViewById(R.id.btn_enable_overlay);
         btnStartService = findViewById(R.id.btn_start_service);
         btnStopService = findViewById(R.id.btn_stop_service);
+        btnSyncContacts = findViewById(R.id.btn_sync_contacts);
+        tvFriendCount = findViewById(R.id.tv_friend_count);
     }
 
     /**
@@ -72,21 +101,20 @@ public class MainActivity extends AppCompatActivity {
             PermissionHelper.requestOverlayPermission(this);
         });
 
-        // 启动服务
+        // 启动服务 - 打开任务配置页面
         btnStartService.setOnClickListener(v -> {
-            Log.d(TAG, "点击启动按钮");
-            WeChatAccessibilityService service = WeChatAccessibilityService.getInstance();
-            Log.d(TAG, "服务实例: " + (service != null ? "存在" : "null"));
+            // 检查是否有好友数据
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            Set<String> friendsSet = prefs.getStringSet(KEY_FRIENDS, new HashSet<>());
 
-            if (service != null) {
-                Log.d(TAG, "调用startAutoTask()");
-                service.startAutoTask();
-                Toast.makeText(this, "自动化任务已启动", Toast.LENGTH_SHORT).show();
-                updateServiceStatus();
-            } else {
-                Log.e(TAG, "无障碍服务实例为null");
-                Toast.makeText(this, "无障碍服务未运行,请先开启无障碍服务", Toast.LENGTH_LONG).show();
+            if (friendsSet.isEmpty()) {
+                Toast.makeText(this, "请先同步通讯录好友", Toast.LENGTH_LONG).show();
+                return;
             }
+
+            // 打开任务配置页面
+            Intent intent = new Intent(this, TaskConfigActivity.class);
+            startActivity(intent);
         });
 
         // 停止服务
@@ -99,6 +127,98 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "无障碍服务未运行", Toast.LENGTH_SHORT).show();
             }
         });
+
+        // 同步通讯录
+        btnSyncContacts.setOnClickListener(v -> {
+            WeChatAccessibilityService service = WeChatAccessibilityService.getInstance();
+            if (service != null) {
+                service.syncContacts();
+                Toast.makeText(this, "开始同步通讯录...", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "无障碍服务未运行,请先开启无障碍服务", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    /**
+     * 设置广播接收器
+     */
+    private void setupBroadcastReceiver() {
+        friendsReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (ACTION_FRIENDS_SYNCED.equals(intent.getAction())) {
+                    ArrayList<String> friends = intent.getStringArrayListExtra(EXTRA_FRIENDS);
+                    if (friends != null) {
+                        updateFriendsList(friends);
+                    }
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(ACTION_FRIENDS_SYNCED);
+        // Android 13+ 需要指定 RECEIVER_NOT_EXPORTED (应用内广播)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(friendsReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(friendsReceiver, filter);
+        }
+    }
+
+    /**
+     * 更新好友列表显示
+     */
+    private void updateFriendsList(ArrayList<String> friends) {
+        // 更新好友数量显示
+        tvFriendCount.setText("✅ 共 " + friends.size() + " 位好友");
+
+        // 保存到SharedPreferences
+        saveFriendsToPrefs(friends);
+
+        Toast.makeText(this, "同步成功! 共 " + friends.size() + " 位好友", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * 保存好友列表到SharedPreferences
+     */
+    private void saveFriendsToPrefs(ArrayList<String> friends) {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+
+        Set<String> friendsSet = new HashSet<>(friends);
+        editor.putStringSet(KEY_FRIENDS, friendsSet);
+        editor.apply();
+
+        Log.d(TAG, "好友列表已保存到SharedPreferences");
+    }
+
+    /**
+     * 从SharedPreferences加载好友列表
+     */
+    private void loadFriendsFromPrefs() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        Set<String> friendsSet = prefs.getStringSet(KEY_FRIENDS, new HashSet<>());
+        long syncTime = prefs.getLong("sync_time", 0);
+
+        if (!friendsSet.isEmpty()) {
+            // 显示同步时间
+            String timeInfo = "";
+            if (syncTime > 0) {
+                long diff = System.currentTimeMillis() - syncTime;
+                if (diff < 60000) {
+                    timeInfo = " (刚刚同步)";
+                } else if (diff < 3600000) {
+                    timeInfo = " (" + (diff / 60000) + "分钟前同步)";
+                } else {
+                    timeInfo = " (" + (diff / 3600000) + "小时前同步)";
+                }
+            }
+
+            tvFriendCount.setText("✅ 共 " + friendsSet.size() + " 位好友" + timeInfo);
+            Log.d(TAG, "从SharedPreferences加载了 " + friendsSet.size() + " 位好友");
+        } else {
+            tvFriendCount.setText("⚠️ 暂无好友数据,请先同步通讯录");
+        }
     }
 
     /**
@@ -122,6 +242,8 @@ public class MainActivity extends AppCompatActivity {
         btnStartService.setEnabled(accessibilityEnabled);
         // 停止按钮: 服务运行中才能点击
         btnStopService.setEnabled(accessibilityEnabled && serviceRunning);
+        // 同步通讯录按钮: 无障碍服务已开启即可点击
+        btnSyncContacts.setEnabled(accessibilityEnabled);
     }
 }
 

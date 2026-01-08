@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F5F5">
+
+    <!-- 顶部标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:background="#FFFFFF"
+        android:gravity="center_vertical"
+        android:elevation="4dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="16dp">
+
+        <!-- 返回按钮 -->
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:text="←"
+            android:textSize="24sp"
+            android:textColor="#333333"
+            style="?android:attr/borderlessButtonStyle" />
+
+        <!-- 标题 -->
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="配置自动化任务"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A" />
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 步骤1: 选择好友 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#FFFFFF"
+                android:padding="16dp"
+                android:layout_marginBottom="16dp"
+                android:elevation="2dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="步骤1: 选择要发送的好友"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#1A1A1A"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- 已选好友数量 -->
+                <TextView
+                    android:id="@+id/tv_selected_count"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="已选择 0 位好友"
+                    android:textSize="14sp"
+                    android:textColor="#666666"
+                    android:padding="12dp"
+                    android:background="#F8F8F8"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- 选择好友按钮 -->
+                <Button
+                    android:id="@+id/btn_select_friends"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="👥 选择好友"
+                    android:textSize="15sp"
+                    android:backgroundTint="#2196F3" />
+
+            </LinearLayout>
+
+            <!-- 步骤2: 配置消息内容 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#FFFFFF"
+                android:padding="16dp"
+                android:layout_marginBottom="16dp"
+                android:elevation="2dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="步骤2: 配置消息内容"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#1A1A1A"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- 消息类型选择 -->
+                <RadioGroup
+                    android:id="@+id/rg_message_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <RadioButton
+                        android:id="@+id/rb_text"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="文字"
+                        android:checked="true" />
+
+                    <RadioButton
+                        android:id="@+id/rb_image"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="图片" />
+
+                    <RadioButton
+                        android:id="@+id/rb_video"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="视频" />
+
+                    <RadioButton
+                        android:id="@+id/rb_card"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="卡片" />
+                </RadioGroup>
+
+                <!-- 文字消息输入 -->
+                <LinearLayout
+                    android:id="@+id/ll_text_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="visible">
+
+                    <EditText
+                        android:id="@+id/et_message_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="120dp"
+                        android:hint="请输入要发送的文字消息"
+                        android:gravity="top"
+                        android:padding="12dp"
+                        android:background="@android:drawable/edit_text" />
+                </LinearLayout>
+
+                <!-- 图片选择 -->
+                <LinearLayout
+                    android:id="@+id/ll_image_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <Button
+                        android:id="@+id/btn_select_image"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="选择图片" />
+
+                    <TextView
+                        android:id="@+id/tv_image_path"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="未选择图片"
+                        android:textSize="14sp"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- 开始执行按钮 -->
+            <Button
+                android:id="@+id/btn_start_task"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:text="🚀 开始执行任务"
+                android:backgroundTint="#4CAF50"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:elevation="2dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>
+
