@@ -1,13 +1,17 @@
 package com.wechat.auto.service;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Path;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.ArrayList;
@@ -197,48 +201,212 @@ public class WeChatAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * 读取通讯录好友列表
+     * 读取通讯录好友列表(带滚动加载)
      */
     private void readContactsList() {
+        try {
+            Log.d(TAG, "开始读取通讯录,将滚动加载所有好友...");
+
+            // 使用Set避免重复
+            Set<String> allFriends = new HashSet<>();
+            int scrollCount = 0;
+            int maxScrolls = 500; // 最大滚动次数(设置为500,足够大),主要依靠连续无新好友判断
+            int noNewFriendsCount = 0; // 连续没有新好友的次数
+
+            while (scrollCount < maxScrolls) {
+                int beforeSize = allFriends.size();
+
+                // 读取当前屏幕的好友
+                Set<String> currentFriends = readCurrentScreenFriends();
+                allFriends.addAll(currentFriends);
+
+                int afterSize = allFriends.size();
+                int newFriends = afterSize - beforeSize;
+
+                Log.d(TAG, "第" + (scrollCount + 1) + "次读取: 本次找到" + currentFriends.size() + "个好友, 新增" + newFriends + "个, 总计" + afterSize + "个");
+
+                if (newFriends == 0) {
+                    noNewFriendsCount++;
+                    Log.d(TAG, "连续" + noNewFriendsCount + "次没有新好友");
+                } else {
+                    noNewFriendsCount = 0;
+                }
+
+                // 如果连续5次没有新好友,说明已经到底了(增加容错次数)
+                if (noNewFriendsCount >= 5) {
+                    Log.d(TAG, "已到达列表底部(连续5次无新好友)");
+                    break;
+                }
+
+                // 执行滚动
+                boolean scrolled = scrollContactsList();
+                if (!scrolled) {
+                    Log.w(TAG, "滚动失败,可能已到底部");
+                    break;
+                }
+
+                scrollCount++;
+
+                // 等待滚动完成和列表加载(增加等待时间到1.5秒)
+                try {
+                    Thread.sleep(1500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            Log.d(TAG, "通讯录读取完成! 总共找到 " + allFriends.size() + " 个真实好友");
+
+            // 转换为List并按首字母排序(模仿微信排序:字母在前,特殊符号在后)
+            List<String> sortedFriends = new ArrayList<>(allFriends);
+            java.util.Collections.sort(sortedFriends, new java.util.Comparator<String>() {
+                @Override
+                public int compare(String s1, String s2) {
+                    // 判断是否以字母开头
+                    boolean s1StartsWithLetter = s1.length() > 0 && Character.isLetter(s1.charAt(0));
+                    boolean s2StartsWithLetter = s2.length() > 0 && Character.isLetter(s2.charAt(0));
+
+                    // 字母开头的排在前面
+                    if (s1StartsWithLetter && !s2StartsWithLetter) {
+                        return -1;
+                    } else if (!s1StartsWithLetter && s2StartsWithLetter) {
+                        return 1;
+                    } else {
+                        // 都是字母或都不是字母,按字母顺序排序
+                        return s1.compareToIgnoreCase(s2);
+                    }
+                }
+            });
+
+            Log.d(TAG, "好友列表已按首字母排序");
+
+            // 打印前10个好友用于调试
+            int printCount = Math.min(10, sortedFriends.size());
+            StringBuilder sb = new StringBuilder("前" + printCount + "个好友: ");
+            for (int i = 0; i < printCount; i++) {
+                sb.append(sortedFriends.get(i)).append(", ");
+            }
+            Log.d(TAG, sb.toString());
+
+            // 发送广播通知MainActivity
+            sendFriendsBroadcast(sortedFriends);
+
+        } catch (Exception e) {
+            Log.e(TAG, "读取通讯录失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 读取当前屏幕上的好友
+     */
+    private Set<String> readCurrentScreenFriends() {
+        Set<String> friends = new HashSet<>();
+
         try {
             AccessibilityNodeInfo rootNode = getRootInActiveWindow();
             if (rootNode == null) {
                 Log.e(TAG, "无法获取根节点");
-                return;
+                return friends;
             }
 
             // 查找所有好友昵称节点 (resource-id: com.tencent.mm:id/kbq)
             List<AccessibilityNodeInfo> friendNodes = rootNode.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/kbq");
 
-            if (friendNodes == null || friendNodes.isEmpty()) {
-                Log.w(TAG, "未找到好友节点");
-                return;
-            }
+            if (friendNodes != null && !friendNodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : friendNodes) {
+                    CharSequence text = node.getText();
+                    if (text != null && text.length() > 0) {
+                        String nickname = text.toString();
 
-            Log.d(TAG, "找到 " + friendNodes.size() + " 个好友节点");
-
-            // 提取好友昵称
-            List<String> friends = new ArrayList<>();
-            for (AccessibilityNodeInfo node : friendNodes) {
-                CharSequence text = node.getText();
-                if (text != null && text.length() > 0) {
-                    String nickname = text.toString();
-
-                    // 过滤掉特殊项
-                    if (!isSpecialItem(nickname)) {
-                        friends.add(nickname);
-                        Log.d(TAG, "好友: " + nickname);
+                        // 过滤掉特殊项
+                        if (!isSpecialItem(nickname)) {
+                            friends.add(nickname);
+                        }
                     }
                 }
             }
 
-            Log.d(TAG, "总共找到 " + friends.size() + " 个真实好友");
+        } catch (Exception e) {
+            Log.e(TAG, "读取当前屏幕好友失败: " + e.getMessage(), e);
+        }
 
-            // 发送广播通知MainActivity
-            sendFriendsBroadcast(friends);
+        return friends;
+    }
+
+    /**
+     * 滚动通讯录列表(使用手势滑动)
+     */
+    private boolean scrollContactsList() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return false;
+            }
+
+            // 查找RecyclerView (通讯录列表)
+            List<AccessibilityNodeInfo> recyclerViews = rootNode.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/mg");
+
+            if (recyclerViews == null || recyclerViews.isEmpty()) {
+                Log.w(TAG, "未找到RecyclerView,尝试全屏滑动");
+                return performSwipeGesture(360, 1200, 360, 400);
+            }
+
+            AccessibilityNodeInfo recyclerView = recyclerViews.get(0);
+            android.graphics.Rect rect = new android.graphics.Rect();
+            recyclerView.getBoundsInScreen(rect);
+
+            Log.d(TAG, "RecyclerView bounds: " + rect.toString());
+
+            // 在RecyclerView区域内滑动
+            int centerX = rect.centerX();
+            int startY = (int) (rect.top + rect.height() * 0.8);  // 从80%位置开始
+            int endY = (int) (rect.top + rect.height() * 0.2);    // 滑动到20%位置
+
+            return performSwipeGesture(centerX, startY, centerX, endY);
 
         } catch (Exception e) {
-            Log.e(TAG, "读取通讯录失败: " + e.getMessage(), e);
+            Log.e(TAG, "滚动失败: " + e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 执行滑动手势
+     */
+    private boolean performSwipeGesture(int startX, int startY, int endX, int endY) {
+        try {
+            Path path = new Path();
+            path.moveTo(startX, startY);
+            path.lineTo(endX, endY);
+
+            // 创建手势描述(滑动时长800ms,更慢更自然,给列表更多加载时间)
+            GestureDescription.StrokeDescription stroke =
+                new GestureDescription.StrokeDescription(path, 0, 800);
+
+            GestureDescription.Builder builder = new GestureDescription.Builder();
+            builder.addStroke(stroke);
+
+            // 执行手势
+            boolean dispatched = dispatchGesture(builder.build(), new GestureResultCallback() {
+                @Override
+                public void onCompleted(GestureDescription gestureDescription) {
+                    Log.d(TAG, "滑动手势执行完成");
+                }
+
+                @Override
+                public void onCancelled(GestureDescription gestureDescription) {
+                    Log.w(TAG, "滑动手势被取消");
+                }
+            }, null);
+
+            Log.d(TAG, String.format("执行滑动手势 (%d,%d)->(%d,%d): %s",
+                startX, startY, endX, endY, dispatched ? "成功" : "失败"));
+            return dispatched;
+
+        } catch (Exception e) {
+            Log.e(TAG, "执行滑动手势失败: " + e.getMessage(), e);
+            return false;
         }
     }
 
@@ -258,14 +426,23 @@ public class WeChatAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * 保存好友列表到SharedPreferences
+     * 保存好友列表到SharedPreferences (保持顺序)
      */
     private void saveFriendsToPrefs(List<String> friends) {
         SharedPreferences prefs = getSharedPreferences("WeChatAutoPrefs", MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
 
-        Set<String> friendsSet = new HashSet<>(friends);
-        editor.putStringSet("friends_list", friendsSet);
+        // 使用JSON字符串保存,保持顺序
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < friends.size(); i++) {
+            if (i > 0) json.append(",");
+            // 转义双引号和反斜杠
+            String escaped = friends.get(i).replace("\\", "\\\\").replace("\"", "\\\"");
+            json.append("\"").append(escaped).append("\"");
+        }
+        json.append("]");
+
+        editor.putString("friends_list", json.toString());
         editor.putLong("sync_time", System.currentTimeMillis());
         editor.apply();
 

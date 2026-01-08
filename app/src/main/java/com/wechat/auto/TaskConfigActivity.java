@@ -3,6 +3,8 @@ package com.wechat.auto;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -77,15 +79,43 @@ public class TaskConfigActivity extends AppCompatActivity {
     }
 
     /**
-     * 加载好友列表
+     * 加载好友列表 (保持顺序,兼容旧版本)
      */
     private void loadFriends() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        Set<String> friendsSet = prefs.getStringSet("friends_list", new HashSet<>());
-
         friendsList.clear();
-        for (String nickname : friendsSet) {
-            friendsList.add(new FriendItem(nickname, false));
+
+        try {
+            // 尝试读取新格式(JSON字符串)
+            String friendsJson = prefs.getString("friends_list", null);
+
+            if (friendsJson != null) {
+                // 新格式:JSON字符串
+                if (friendsJson.length() > 2) {
+                    String content = friendsJson.substring(1, friendsJson.length() - 1);
+                    if (!content.isEmpty()) {
+                        String[] items = content.split("\",\"");
+                        for (String item : items) {
+                            String friend = item.replace("\"", "")
+                                               .replace("\\\\", "\\")
+                                               .replace("\\\"", "\"");
+                            if (!friend.isEmpty()) {
+                                friendsList.add(new FriendItem(friend, false));
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 旧格式:StringSet
+                Set<String> friendsSet = prefs.getStringSet("friends_list", null);
+                if (friendsSet != null) {
+                    for (String nickname : friendsSet) {
+                        friendsList.add(new FriendItem(nickname, false));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "加载好友列表失败: " + e.getMessage());
         }
 
         Log.d(TAG, "加载了 " + friendsList.size() + " 位好友");
@@ -128,11 +158,11 @@ public class TaskConfigActivity extends AppCompatActivity {
         friendsDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         friendsDialog.setContentView(R.layout.dialog_select_friends);
 
-        // 设置弹窗大小
+        // 设置弹窗大小(占屏幕90%高度)
         Window window = friendsDialog.getWindow();
         if (window != null) {
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                           (int)(getResources().getDisplayMetrics().heightPixels * 0.8));
+                           (int)(getResources().getDisplayMetrics().heightPixels * 0.9));
         }
 
         // 初始化弹窗内的控件

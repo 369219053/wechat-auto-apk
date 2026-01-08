@@ -3,27 +3,30 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="8dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
     android:gravity="center_vertical"
-    android:minHeight="48dp">
+    android:minHeight="42dp">
 
     <!-- 复选框 -->
     <CheckBox
         android:id="@+id/cb_friend"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp" />
+        android:layout_marginEnd="6dp" />
 
     <!-- 头像 -->
     <TextView
         android:id="@+id/tv_avatar"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
         android:gravity="center"
-        android:textSize="16sp"
+        android:textSize="14sp"
         android:textColor="@android:color/white"
         android:background="@android:color/holo_blue_light"
-        android:layout_marginEnd="10dp" />
+        android:layout_marginEnd="8dp" />
 
     <!-- 昵称 -->
     <TextView
@@ -31,8 +34,10 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textSize="15sp"
-        android:textColor="#333333" />
+        android:textSize="14sp"
+        android:textColor="#333333"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
 </LinearLayout>
 

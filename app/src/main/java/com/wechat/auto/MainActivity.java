@@ -105,9 +105,12 @@ public class MainActivity extends AppCompatActivity {
         btnStartService.setOnClickListener(v -> {
             // 检查是否有好友数据
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-            Set<String> friendsSet = prefs.getStringSet(KEY_FRIENDS, new HashSet<>());
+            String friendsJson = prefs.getString(KEY_FRIENDS, "[]");
 
-            if (friendsSet.isEmpty()) {
+            // 简单判断是否为空
+            boolean hasFriends = friendsJson != null && friendsJson.length() > 2;
+
+            if (!hasFriends) {
                 Toast.makeText(this, "请先同步通讯录好友", Toast.LENGTH_LONG).show();
                 return;
             }
@@ -179,28 +182,73 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 保存好友列表到SharedPreferences
+     * 保存好友列表到SharedPreferences (保持顺序)
      */
     private void saveFriendsToPrefs(ArrayList<String> friends) {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
 
-        Set<String> friendsSet = new HashSet<>(friends);
-        editor.putStringSet(KEY_FRIENDS, friendsSet);
+        // 使用JSON字符串保存,保持顺序
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < friends.size(); i++) {
+            if (i > 0) json.append(",");
+            // 转义双引号和反斜杠
+            String escaped = friends.get(i).replace("\\", "\\\\").replace("\"", "\\\"");
+            json.append("\"").append(escaped).append("\"");
+        }
+        json.append("]");
+
+        editor.putString(KEY_FRIENDS, json.toString());
         editor.apply();
 
-        Log.d(TAG, "好友列表已保存到SharedPreferences");
+        Log.d(TAG, "好友列表已保存到SharedPreferences (保持顺序)");
     }
 
     /**
-     * 从SharedPreferences加载好友列表
+     * 从SharedPreferences加载好友列表 (保持顺序,兼容旧版本)
      */
     private void loadFriendsFromPrefs() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        Set<String> friendsSet = prefs.getStringSet(KEY_FRIENDS, new HashSet<>());
         long syncTime = prefs.getLong("sync_time", 0);
+        ArrayList<String> friends = new ArrayList<>();
 
-        if (!friendsSet.isEmpty()) {
+        try {
+            // 尝试读取新格式(JSON字符串)
+            String friendsJson = prefs.getString(KEY_FRIENDS, null);
+
+            if (friendsJson != null) {
+                // 新格式:JSON字符串
+                if (friendsJson.length() > 2) {
+                    String content = friendsJson.substring(1, friendsJson.length() - 1);
+                    if (!content.isEmpty()) {
+                        String[] items = content.split("\",\"");
+                        for (String item : items) {
+                            String friend = item.replace("\"", "")
+                                               .replace("\\\\", "\\")
+                                               .replace("\\\"", "\"");
+                            if (!friend.isEmpty()) {
+                                friends.add(friend);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 旧格式:StringSet,尝试读取并转换
+                Set<String> friendsSet = prefs.getStringSet(KEY_FRIENDS, null);
+                if (friendsSet != null && !friendsSet.isEmpty()) {
+                    friends.addAll(friendsSet);
+                    // 转换成新格式并保存
+                    saveFriendsToPrefs(friends);
+                    Log.d(TAG, "已将旧格式数据转换为新格式");
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "加载好友列表失败: " + e.getMessage());
+            // 清除损坏的数据
+            prefs.edit().remove(KEY_FRIENDS).apply();
+        }
+
+        if (!friends.isEmpty()) {
             // 显示同步时间
             String timeInfo = "";
             if (syncTime > 0) {
@@ -214,8 +262,8 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            tvFriendCount.setText("✅ 共 " + friendsSet.size() + " 位好友" + timeInfo);
-            Log.d(TAG, "从SharedPreferences加载了 " + friendsSet.size() + " 位好友");
+            tvFriendCount.setText("✅ 共 " + friends.size() + " 位好友" + timeInfo);
+            Log.d(TAG, "从SharedPreferences加载了 " + friends.size() + " 位好友");
         } else {
             tvFriendCount.setText("⚠️ 暂无好友数据,请先同步通讯录");
         }
