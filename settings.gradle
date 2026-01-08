@@ -1,0 +1,3 @@
+rootProject.name = "WeChatAuto"
+include ':app'
+

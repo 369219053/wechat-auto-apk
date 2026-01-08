@@ -1,0 +1,152 @@
+# 微信私域自动化APK - Python依赖
+
+# ==================== 核心依赖 ====================
+
+# uiautomator2 - Android自动化框架
+uiautomator2>=2.16.23
+
+# weditor - UI元素查看工具
+weditor>=0.6.5
+
+# adbutils - ADB工具库
+adbutils>=1.2.0
+
+# ==================== 数据处理 ====================
+
+# requests - HTTP请求库
+requests>=2.31.0
+
+# pandas - 数据处理
+pandas>=2.0.0
+
+# openpyxl - Excel文件处理
+openpyxl>=3.1.0
+
+# ==================== AI集成 ====================
+
+# openai - OpenAI API客户端
+openai>=1.0.0
+
+# coze-py - COZE API客户端(如果有官方库)
+# coze-py>=1.0.0
+
+# ==================== 飞书集成 ====================
+
+# lark-oapi - 飞书开放平台SDK
+lark-oapi>=1.2.0
+
+# ==================== 配置管理 ====================
+
+# python-dotenv - 环境变量管理
+python-dotenv>=1.0.0
+
+# configparser - 配置文件解析(Python内置,但列出以明确)
+# configparser>=5.3.0
+
+# ==================== 日志和监控 ====================
+
+# loguru - 更好的日志库
+loguru>=0.7.0
+
+# ==================== 任务调度 ====================
+
+# schedule - 定时任务
+schedule>=1.2.0
+
+# APScheduler - 高级任务调度
+APScheduler>=3.10.0
+
+# ==================== 数据库(可选) ====================
+
+# SQLAlchemy - ORM框架
+SQLAlchemy>=2.0.0
+
+# pymysql - MySQL驱动
+pymysql>=1.1.0
+
+# psycopg2-binary - PostgreSQL驱动
+psycopg2-binary>=2.9.0
+
+# ==================== 任务队列(可选) ====================
+
+# celery - 分布式任务队列
+celery>=5.3.0
+
+# redis - Redis客户端
+redis>=5.0.0
+
+# ==================== API服务(可选) ====================
+
+# fastapi - 现代Web框架
+fastapi>=0.104.0
+
+# uvicorn - ASGI服务器
+uvicorn>=0.24.0
+
+# pydantic - 数据验证
+pydantic>=2.5.0
+
+# ==================== 图像处理 ====================
+
+# Pillow - 图像处理库
+Pillow>=10.0.0
+
+# opencv-python - 计算机视觉库
+opencv-python>=4.8.0
+
+# ==================== 文本处理 ====================
+
+# jieba - 中文分词
+jieba>=0.42.1
+
+# ==================== 工具库 ====================
+
+# python-dateutil - 日期处理
+python-dateutil>=2.8.2
+
+# tqdm - 进度条
+tqdm>=4.66.0
+
+# retry - 重试装饰器
+retry>=0.9.2
+
+# ==================== APK打包(可选) ====================
+
+# kivy - Python移动应用框架
+# kivy>=2.2.0
+# kivymd>=1.1.1
+
+# buildozer - APK打包工具(Linux/Mac)
+# buildozer>=1.5.0
+
+# python-for-android - Android打包
+# python-for-android>=2023.0.0
+
+# ==================== 开发工具 ====================
+
+# pytest - 测试框架
+pytest>=7.4.0
+
+# black - 代码格式化
+black>=23.0.0
+
+# flake8 - 代码检查
+flake8>=6.1.0
+
+# mypy - 类型检查
+mypy>=1.7.0
+
+# ==================== 其他 ====================
+
+# PyYAML - YAML文件处理
+PyYAML>=6.0.1
+
+# markdown - Markdown处理
+markdown>=3.5.0
+
+# beautifulsoup4 - HTML解析
+beautifulsoup4>=4.12.0
+
+# lxml - XML解析
+lxml>=4.9.0
+

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">微信私域自动化</string>
+    
+    <!-- 服务状态 -->
+    <string name="service_status_checking">正在检查服务状态...</string>
+    
+    <!-- 按钮文字 -->
+    <string name="enable_accessibility_service">开启无障碍服务</string>
+    <string name="enable_overlay_permission">开启悬浮窗权限</string>
+    <string name="start_auto_task">启动自动化任务</string>
+    <string name="stop_auto_task">停止自动化任务</string>
+    
+    <!-- 说明文字 -->
+    <string name="usage_instruction">使用说明:\n1. 先开启无障碍服务\n2. 再开启悬浮窗权限\n3. 点击启动按钮开始自动化任务</string>
+    
+    <!-- 无障碍服务描述 -->
+    <string name="accessibility_service_description">微信私域自动化服务\n用于自动采集朋友圈和智能私信</string>
+</resources>
+
