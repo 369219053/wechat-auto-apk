@@ -90,7 +90,7 @@
 
             </LinearLayout>
 
-            <!-- 步骤2: 配置消息内容 -->
+            <!-- 步骤2: 配置消息内容 (支持多选) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -103,90 +103,72 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="步骤2: 配置消息内容"
+                    android:text="步骤2: 配置消息内容 (支持多条)"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="#1A1A1A"
                     android:layout_marginBottom="12dp" />
 
-                <!-- 消息类型选择 -->
-                <RadioGroup
-                    android:id="@+id/rg_message_type"
+                <!-- 添加消息按钮组 -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:layout_marginBottom="12dp">
 
-                    <RadioButton
-                        android:id="@+id/rb_text"
+                    <Button
+                        android:id="@+id/btn_add_text"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="48dp"
                         android:layout_weight="1"
-                        android:text="文字"
-                        android:checked="true" />
-
-                    <RadioButton
-                        android:id="@+id/rb_image"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="图片" />
-
-                    <RadioButton
-                        android:id="@+id/rb_video"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="视频" />
-
-                    <RadioButton
-                        android:id="@+id/rb_card"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="卡片" />
-                </RadioGroup>
-
-                <!-- 文字消息输入 -->
-                <LinearLayout
-                    android:id="@+id/ll_text_input"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="visible">
-
-                    <EditText
-                        android:id="@+id/et_message_text"
-                        android:layout_width="match_parent"
-                        android:layout_height="120dp"
-                        android:hint="请输入要发送的文字消息"
-                        android:gravity="top"
-                        android:padding="12dp"
-                        android:background="@android:drawable/edit_text" />
-                </LinearLayout>
-
-                <!-- 图片选择 -->
-                <LinearLayout
-                    android:id="@+id/ll_image_input"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                        android:text="📝 添加文字"
+                        android:textSize="13sp"
+                        android:backgroundTint="#2196F3"
+                        android:layout_marginEnd="4dp" />
 
                     <Button
-                        android:id="@+id/btn_select_image"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="选择图片" />
+                        android:id="@+id/btn_add_image"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🖼️ 添加图片"
+                        android:textSize="13sp"
+                        android:backgroundTint="#4CAF50"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="4dp" />
 
-                    <TextView
-                        android:id="@+id/tv_image_path"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="未选择图片"
-                        android:textSize="14sp"
-                        android:layout_marginTop="8dp" />
+                    <Button
+                        android:id="@+id/btn_add_video"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🎬 添加视频"
+                        android:textSize="13sp"
+                        android:backgroundTint="#FF9800"
+                        android:layout_marginStart="4dp" />
                 </LinearLayout>
+
+                <!-- 已添加的消息列表 -->
+                <TextView
+                    android:id="@+id/tv_message_count"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="已添加 0 条消息"
+                    android:textSize="14sp"
+                    android:textColor="#666666"
+                    android:padding="8dp"
+                    android:background="#F8F8F8"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 消息列表 -->
+                <ListView
+                    android:id="@+id/lv_messages"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:background="#FAFAFA"
+                    android:divider="#E0E0E0"
+                    android:dividerHeight="1dp"
+                    android:padding="4dp" />
 
             </LinearLayout>
 

@@ -198,7 +198,38 @@ git push origin main
 
 ---
 
+### V0.4.2 - 2026-01-14 - [FEAT]
+
+**提交信息**: 实现图片视频选择功能,完善任务配置系统
+
+**更新内容**:
+- ✅ 实现图片选择功能 (Intent.ACTION_PICK)
+- ✅ 实现视频选择功能 (Intent.ACTION_PICK)
+- ✅ 添加文件路径获取功能 (MediaStore查询)
+- ✅ 添加存储权限管理 (支持Android 13+新权限)
+- ✅ 添加onActivityResult处理文件选择结果
+- ✅ 更新AndroidManifest.xml添加存储权限
+- ✅ 更新MainActivity添加运行时权限请求
+- ✅ 真机测试通过 (vivo手机)
+- ✅ 更新README.md记录V0.4.2版本
+- ✅ 更新自动化文档.md记录技术实现
+
+**Git命令**:
+```bash
+git add .
+git commit -m "[FEAT] 实现图片视频选择功能,完善任务配置系统"
+git push origin main
+```
+
+**备注**: 任务配置系统基本完成,支持文字、图片、视频消息配置
+
+---
+
 ## 🔄 更新记录
+
+### 2026-01-14
+- ✅ 添加V0.4.2版本记录 (图片视频选择功能)
+- ✅ 更新README和自动化文档
 
 ### 2026-01-04
 - ✅ 创建Git版本记录文档
