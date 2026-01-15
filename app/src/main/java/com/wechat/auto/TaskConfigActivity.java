@@ -27,6 +27,8 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import com.wechat.auto.model.SendTask;
+import com.wechat.auto.service.WeChatAccessibilityService;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -423,10 +425,40 @@ public class TaskConfigActivity extends AppCompatActivity {
             return;
         }
 
-        // TODO: 实现任务执行逻辑
-        String info = String.format("将向 %d 位好友发送 %d 条消息",
+        // 检查无障碍服务是否开启
+        WeChatAccessibilityService service = WeChatAccessibilityService.getInstance();
+        if (service == null) {
+            Toast.makeText(this, "请先开启无障碍服务", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        // 构建任务数据
+        SendTask task = new SendTask();
+
+        // 添加好友列表
+        List<String> friendNames = new ArrayList<>();
+        for (String friendName : selectedFriends) {
+            friendNames.add(friendName);
+        }
+        task.setFriendNames(friendNames);
+
+        // 添加消息列表
+        List<SendTask.Message> messages = new ArrayList<>();
+        for (MessageItem item : messagesList) {
+            messages.add(new SendTask.Message(item.type, item.content));
+        }
+        task.setMessages(messages);
+
+        // 启动任务
+        service.startSendTask(task);
+
+        // 提示用户
+        String info = String.format("开始执行任务:\n向 %d 位好友发送 %d 条消息",
                                    selectedFriends.size(), messagesList.size());
-        Toast.makeText(this, info, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, info, Toast.LENGTH_LONG).show();
+
+        // 返回主界面
+        finish();
     }
 
     /**

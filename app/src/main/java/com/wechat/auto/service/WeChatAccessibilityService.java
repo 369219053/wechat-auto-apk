@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Path;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
@@ -14,6 +15,7 @@ import android.util.Log;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import com.wechat.auto.model.SendTask;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -31,9 +33,24 @@ public class WeChatAccessibilityService extends AccessibilityService {
 
     private static final String TAG = "WeChatAutoService";
     private static final String WECHAT_PACKAGE = "com.tencent.mm";
-    
+
     private static WeChatAccessibilityService instance;
     private boolean isAutoTaskRunning = false;
+
+    // 任务执行相关
+    private SendTask currentTask;
+    private int currentFriendIndex = 0;
+    private int currentMessageIndex = 0;
+    private TaskState taskState = TaskState.IDLE;
+
+    // 任务状态枚举
+    private enum TaskState {
+        IDLE,               // 空闲
+        OPENING_WECHAT,     // 打开微信
+        SEARCHING_FRIEND,   // 搜索好友
+        SENDING_MESSAGE,    // 发送消息
+        TASK_COMPLETED      // 任务完成
+    }
 
     @Override
     public void onCreate() {
@@ -108,6 +125,33 @@ public class WeChatAccessibilityService extends AccessibilityService {
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             clickContactsTab();
         }, 2000);
+    }
+
+    /**
+     * 启动发送任务
+     */
+    public void startSendTask(SendTask task) {
+        if (task == null || task.getFriendNames().isEmpty() || task.getMessages().isEmpty()) {
+            Log.e(TAG, "任务数据无效");
+            return;
+        }
+
+        this.currentTask = task;
+        this.currentFriendIndex = 0;
+        this.currentMessageIndex = 0;
+        this.taskState = TaskState.OPENING_WECHAT;
+        this.isAutoTaskRunning = true;
+
+        Log.d(TAG, String.format("开始执行任务: %d位好友, %d条消息",
+            task.getFriendNames().size(), task.getMessages().size()));
+
+        // 启动微信
+        launchWeChat();
+
+        // 延迟3秒后开始搜索第一个好友
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            searchFriend(task.getFriendNames().get(0));
+        }, 3000);
     }
 
     /**
@@ -541,6 +585,365 @@ public class WeChatAccessibilityService extends AccessibilityService {
         }
 
         return false;
+    }
+
+    /**
+     * 搜索好友
+     */
+    private void searchFriend(String friendName) {
+        Log.d(TAG, "开始搜索好友: " + friendName);
+        taskState = TaskState.SEARCHING_FRIEND;
+
+        // 1. 点击搜索按钮
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            clickSearchButton();
+        }, 1000);
+
+        // 2. 输入好友昵称
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            inputSearchText(friendName);
+        }, 2500);
+
+        // 3. 点击搜索结果
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            clickSearchResult(friendName);
+        }, 4000);
+
+        // 4. 等待聊天界面加载完成后再发送消息
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            sendMessages();
+        }, 6000);
+    }
+
+    /**
+     * 点击搜索按钮 (使用resource-id精确定位)
+     */
+    private void clickSearchButton() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 方法1: 通过resource-id查找搜索按钮
+            List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/jha");
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    if (node.isClickable()) {
+                        node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击搜索按钮成功 (通过resource-id)");
+                        return;
+                    }
+                }
+            }
+
+            // 方法2: 通过content-desc查找
+            nodes = rootNode.findAccessibilityNodeInfosByText("搜索");
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    CharSequence desc = node.getContentDescription();
+                    if (desc != null && desc.toString().equals("搜索") && node.isClickable()) {
+                        node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击搜索按钮成功 (通过content-desc)");
+                        return;
+                    }
+                }
+            }
+
+            Log.w(TAG, "未找到搜索按钮");
+
+        } catch (Exception e) {
+            Log.e(TAG, "点击搜索按钮失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 输入搜索文本
+     */
+    private void inputSearchText(String text) {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找搜索输入框 (EditText)
+            List<AccessibilityNodeInfo> editTexts = findNodesByClassName(rootNode, "android.widget.EditText");
+            if (editTexts != null && !editTexts.isEmpty()) {
+                AccessibilityNodeInfo editText = editTexts.get(0);
+
+                // 先点击获取焦点
+                editText.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+
+                // 输入文本
+                Bundle arguments = new Bundle();
+                arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+
+                Log.d(TAG, "输入搜索文本成功: " + text);
+                return;
+            }
+
+            Log.w(TAG, "未找到搜索输入框");
+
+        } catch (Exception e) {
+            Log.e(TAG, "输入搜索文本失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 点击搜索结果
+     */
+    private void clickSearchResult(String friendName) {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找好友名称
+            List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText(friendName);
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    AccessibilityNodeInfo clickableNode = findClickableParent(node);
+                    if (clickableNode != null) {
+                        clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击搜索结果成功: " + friendName);
+                        return;
+                    }
+                }
+            }
+
+            Log.w(TAG, "未找到搜索结果: " + friendName);
+
+        } catch (Exception e) {
+            Log.e(TAG, "点击搜索结果失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 发送消息
+     */
+    private void sendMessages() {
+        if (currentTask == null || currentTask.getMessages().isEmpty()) {
+            Log.e(TAG, "没有要发送的消息");
+            return;
+        }
+
+        Log.d(TAG, "开始发送消息");
+        taskState = TaskState.SENDING_MESSAGE;
+        currentMessageIndex = 0;
+
+        // 发送第一条消息
+        sendNextMessage();
+    }
+
+    /**
+     * 发送下一条消息
+     */
+    private void sendNextMessage() {
+        if (currentTask == null || currentMessageIndex >= currentTask.getMessages().size()) {
+            // 所有消息发送完成,处理下一个好友
+            handleNextFriend();
+            return;
+        }
+
+        SendTask.Message message = currentTask.getMessages().get(currentMessageIndex);
+        Log.d(TAG, String.format("发送第 %d 条消息, 类型: %s", currentMessageIndex + 1, message.getType()));
+
+        if ("text".equals(message.getType())) {
+            sendTextMessage(message.getContent());
+        } else if ("image".equals(message.getType())) {
+            sendImageMessage(message.getContent());
+        } else if ("video".equals(message.getType())) {
+            sendVideoMessage(message.getContent());
+        }
+
+        currentMessageIndex++;
+
+        // 延迟1秒后发送下一条消息
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            sendNextMessage();
+        }, 1000);
+    }
+
+    /**
+     * 发送文字消息
+     */
+    private void sendTextMessage(String text) {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找聊天输入框 (通常在底部)
+            List<AccessibilityNodeInfo> editTexts = findNodesByClassName(rootNode, "android.widget.EditText");
+            if (editTexts != null && !editTexts.isEmpty()) {
+                // 使用最后一个EditText (通常聊天输入框在底部,搜索框在顶部)
+                AccessibilityNodeInfo chatEditText = editTexts.get(editTexts.size() - 1);
+
+                if (chatEditText != null) {
+                    // 先点击输入框获取焦点
+                    chatEditText.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+
+                    Log.d(TAG, "找到聊天输入框,准备输入文字");
+
+                    // 延迟300ms后输入文本
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        Bundle arguments = new Bundle();
+                        arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                        chatEditText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+
+                        Log.d(TAG, "输入文字消息成功: " + text);
+
+                        // 延迟800ms后点击发送按钮
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            clickSendButton();
+                        }, 800);
+                    }, 300);
+
+                    return;
+                }
+            }
+
+            Log.w(TAG, "未找到聊天输入框");
+
+        } catch (Exception e) {
+            Log.e(TAG, "发送文字消息失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 点击发送按钮
+     */
+    private void clickSendButton() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 方法1: 通过resource-id查找发送按钮
+            List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/bql");
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    if (node.isClickable() && "android.widget.Button".equals(node.getClassName())) {
+                        node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击发送按钮成功 (通过resource-id)");
+                        return;
+                    }
+                }
+            }
+
+            // 方法2: 通过text查找发送按钮
+            nodes = rootNode.findAccessibilityNodeInfosByText("发送");
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    CharSequence text = node.getText();
+                    if (text != null && "发送".equals(text.toString()) && node.isClickable()) {
+                        node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击发送按钮成功 (通过text)");
+                        return;
+                    }
+                }
+            }
+
+            Log.w(TAG, "未找到发送按钮");
+
+        } catch (Exception e) {
+            Log.e(TAG, "点击发送按钮失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 发送图片消息 (暂未实现)
+     */
+    private void sendImageMessage(String imagePath) {
+        Log.d(TAG, "发送图片消息: " + imagePath + " (功能开发中)");
+        // TODO: 实现图片发送功能
+    }
+
+    /**
+     * 发送视频消息 (暂未实现)
+     */
+    private void sendVideoMessage(String videoPath) {
+        Log.d(TAG, "发送视频消息: " + videoPath + " (功能开发中)");
+        // TODO: 实现视频发送功能
+    }
+
+    /**
+     * 处理下一个好友
+     */
+    private void handleNextFriend() {
+        currentFriendIndex++;
+
+        if (currentFriendIndex >= currentTask.getFriendNames().size()) {
+            // 所有好友处理完成
+            taskCompleted();
+            return;
+        }
+
+        Log.d(TAG, String.format("处理下一个好友 (%d/%d)",
+            currentFriendIndex + 1, currentTask.getFriendNames().size()));
+
+        // 返回微信主界面
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            performGlobalAction(GLOBAL_ACTION_BACK);
+        }, 500);
+
+        // 延迟1秒后返回到主界面
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            performGlobalAction(GLOBAL_ACTION_BACK);
+        }, 1500);
+
+        // 延迟2秒后搜索下一个好友
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            String nextFriend = currentTask.getFriendNames().get(currentFriendIndex);
+            searchFriend(nextFriend);
+        }, 2500);
+    }
+
+    /**
+     * 任务完成
+     */
+    private void taskCompleted() {
+        Log.d(TAG, "所有任务执行完成!");
+        taskState = TaskState.TASK_COMPLETED;
+        isAutoTaskRunning = false;
+        currentTask = null;
+        currentFriendIndex = 0;
+        currentMessageIndex = 0;
+
+        // TODO: 发送广播通知任务完成
+    }
+
+    /**
+     * 根据类名查找节点
+     */
+    private List<AccessibilityNodeInfo> findNodesByClassName(AccessibilityNodeInfo rootNode, String className) {
+        List<AccessibilityNodeInfo> result = new ArrayList<>();
+        if (rootNode == null) {
+            return result;
+        }
+
+        if (className.equals(rootNode.getClassName())) {
+            result.add(rootNode);
+        }
+
+        for (int i = 0; i < rootNode.getChildCount(); i++) {
+            AccessibilityNodeInfo child = rootNode.getChild(i);
+            if (child != null) {
+                result.addAll(findNodesByClassName(child, className));
+            }
+        }
+
+        return result;
     }
 }
 
