@@ -42,6 +42,14 @@ public class WeChatAccessibilityService extends AccessibilityService {
     private int currentFriendIndex = 0;
     private int currentMessageIndex = 0;
     private TaskState taskState = TaskState.IDLE;
+    private boolean isTextPhase = true; // true=发送文字阶段, false=发送图片/视频阶段
+    private java.util.Set<Integer> sentMessageIndices = new java.util.HashSet<>(); // 已发送的消息索引
+    private boolean isInChatWindow = false; // 是否已经在聊天界面
+
+    // Intent分享相关
+    private boolean isInShareMode = false;  // 是否在分享模式
+    private String currentShareFriendName;  // 当前要分享给的好友名称
+    private String currentShareFilePath;    // 当前要分享的文件路径
 
     // 任务状态枚举
     private enum TaskState {
@@ -49,6 +57,7 @@ public class WeChatAccessibilityService extends AccessibilityService {
         OPENING_WECHAT,     // 打开微信
         SEARCHING_FRIEND,   // 搜索好友
         SENDING_MESSAGE,    // 发送消息
+        SHARING_FILE,       // 分享文件中
         TASK_COMPLETED      // 任务完成
     }
 
@@ -67,12 +76,18 @@ public class WeChatAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (!isAutoTaskRunning) {
+        if (!isAutoTaskRunning && !isInShareMode) {
             return;
         }
 
         String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-        
+
+        // 处理Android系统的分享选择器
+        if ("com.android.intentresolver".equals(packageName)) {
+            handleShareChooser(event);
+            return;
+        }
+
         // 只处理微信的事件
         if (!WECHAT_PACKAGE.equals(packageName)) {
             return;
@@ -80,6 +95,12 @@ public class WeChatAccessibilityService extends AccessibilityService {
 
         int eventType = event.getEventType();
         Log.d(TAG, "收到微信事件: " + AccessibilityEvent.eventTypeToString(eventType));
+
+        // 如果在分享模式,处理分享界面
+        if (isInShareMode) {
+            handleShareEvent(event);
+            return;
+        }
 
         // 处理不同类型的事件
         switch (eventType) {
@@ -139,19 +160,181 @@ public class WeChatAccessibilityService extends AccessibilityService {
         this.currentTask = task;
         this.currentFriendIndex = 0;
         this.currentMessageIndex = 0;
-        this.taskState = TaskState.OPENING_WECHAT;
         this.isAutoTaskRunning = true;
+        this.isTextPhase = true;
+        this.sentMessageIndices.clear();
+        this.isInChatWindow = false;
 
         Log.d(TAG, String.format("开始执行任务: %d位好友, %d条消息",
             task.getFriendNames().size(), task.getMessages().size()));
 
-        // 启动微信
-        launchWeChat();
+        // 开始处理第一条消息
+        processNextMessage();
+    }
 
-        // 延迟3秒后开始搜索第一个好友
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            searchFriend(task.getFriendNames().get(0));
-        }, 3000);
+    /**
+     * 继续下一条消息(在聊天界面发送完文字后调用)
+     */
+    private void continueNextMessage() {
+        if (currentTask == null) {
+            return;
+        }
+
+        // 检查是否所有好友都处理完了
+        if (currentFriendIndex >= currentTask.getFriendNames().size()) {
+            taskCompleted();
+            return;
+        }
+
+        String friendName = currentTask.getFriendNames().get(currentFriendIndex);
+
+        // 第一阶段: 继续发送下一条文字消息
+        if (isTextPhase) {
+            for (int i = 0; i < currentTask.getMessages().size(); i++) {
+                if (sentMessageIndices.contains(i)) {
+                    continue; // 已发送,跳过
+                }
+
+                SendTask.Message message = currentTask.getMessages().get(i);
+                if ("text".equals(message.getType())) {
+                    currentMessageIndex = i;
+                    // 注意: 不在这里标记为已发送,等发送成功后再标记
+
+                    Log.d(TAG, String.format("继续发送好友[%s]的第%d条消息(文字)",
+                        friendName, i + 1));
+
+                    // 已经在聊天界面,直接发送文字
+                    taskState = TaskState.SENDING_MESSAGE;
+                    sendTextMessage(message.getContent());
+                    return;
+                }
+            }
+
+            // 所有文字消息已发送完,切换到图片/视频阶段
+            isTextPhase = false;
+            isInChatWindow = false; // 退出聊天界面标记
+            Log.d(TAG, "文字消息发送完成,开始发送图片/视频");
+        }
+
+        // 第二阶段: 发送所有图片/视频消息
+        for (int i = 0; i < currentTask.getMessages().size(); i++) {
+            if (sentMessageIndices.contains(i)) {
+                continue; // 已发送,跳过
+            }
+
+            SendTask.Message message = currentTask.getMessages().get(i);
+            if ("image".equals(message.getType()) || "video".equals(message.getType())) {
+                currentMessageIndex = i;
+                // 注意: 不在这里标记为已发送,等分享成功后再标记
+
+                Log.d(TAG, String.format("处理好友[%s]的第%d条消息(%s)",
+                    friendName, i + 1, message.getType()));
+
+                // 图片/视频消息: 直接用Intent分享
+                taskState = TaskState.SHARING_FILE;
+                if ("image".equals(message.getType())) {
+                    sendImageMessage(message.getContent());
+                } else {
+                    sendVideoMessage(message.getContent());
+                }
+                return;
+            }
+        }
+
+        // 所有消息都已发送完成,处理下一个好友
+        currentFriendIndex++;
+        currentMessageIndex = 0;
+        isTextPhase = true;
+        isInChatWindow = false;
+        sentMessageIndices.clear();
+        processNextMessage();
+    }
+
+    /**
+     * 处理下一条消息(先发送所有文字,再发送所有图片/视频)
+     */
+    private void processNextMessage() {
+        if (currentTask == null) {
+            return;
+        }
+
+        // 检查是否所有好友都处理完了
+        if (currentFriendIndex >= currentTask.getFriendNames().size()) {
+            taskCompleted();
+            return;
+        }
+
+        String friendName = currentTask.getFriendNames().get(currentFriendIndex);
+
+        // 第一阶段: 发送所有文字消息
+        if (isTextPhase) {
+            for (int i = 0; i < currentTask.getMessages().size(); i++) {
+                if (sentMessageIndices.contains(i)) {
+                    continue; // 已发送,跳过
+                }
+
+                SendTask.Message message = currentTask.getMessages().get(i);
+                if ("text".equals(message.getType())) {
+                    currentMessageIndex = i;
+                    // 注意: 不在这里标记为已发送,等发送成功后再标记
+
+                    Log.d(TAG, String.format("处理好友[%s]的第%d条消息(文字)",
+                        friendName, i + 1));
+
+                    // 如果还没进入聊天界面,先进入
+                    if (!isInChatWindow) {
+                        taskState = TaskState.OPENING_WECHAT;
+                        launchWeChat();
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            searchFriend(friendName);
+                        }, 3000);
+                    } else {
+                        // 已经在聊天界面,直接发送文字
+                        taskState = TaskState.SENDING_MESSAGE;
+                        sendTextMessage(message.getContent());
+                    }
+                    return;
+                }
+            }
+
+            // 所有文字消息已发送完,切换到图片/视频阶段
+            isTextPhase = false;
+            isInChatWindow = false; // 退出聊天界面标记
+            Log.d(TAG, "文字消息发送完成,开始发送图片/视频");
+        }
+
+        // 第二阶段: 发送所有图片/视频消息
+        for (int i = 0; i < currentTask.getMessages().size(); i++) {
+            if (sentMessageIndices.contains(i)) {
+                continue; // 已发送,跳过
+            }
+
+            SendTask.Message message = currentTask.getMessages().get(i);
+            if ("image".equals(message.getType()) || "video".equals(message.getType())) {
+                currentMessageIndex = i;
+                // 注意: 不在这里标记为已发送,等分享成功后再标记
+
+                Log.d(TAG, String.format("处理好友[%s]的第%d条消息(%s)",
+                    friendName, i + 1, message.getType()));
+
+                // 图片/视频消息: 直接用Intent分享
+                taskState = TaskState.SHARING_FILE;
+                if ("image".equals(message.getType())) {
+                    sendImageMessage(message.getContent());
+                } else {
+                    sendVideoMessage(message.getContent());
+                }
+                return;
+            }
+        }
+
+        // 所有消息都已发送完成,处理下一个好友
+        currentFriendIndex++;
+        currentMessageIndex = 0;
+        isTextPhase = true;
+        isInChatWindow = false;
+        sentMessageIndices.clear();
+        processNextMessage();
     }
 
     /**
@@ -530,6 +713,26 @@ public class WeChatAccessibilityService extends AccessibilityService {
     private void handleWindowStateChanged(AccessibilityEvent event) {
         String className = event.getClassName() != null ? event.getClassName().toString() : "";
         Log.d(TAG, "窗口变化: " + className);
+
+        // 检测是否进入了聊天界面
+        if ("com.tencent.mm.ui.chatting.ChattingUI".equals(className)) {
+            // 如果之前不在聊天界面,现在进入了
+            if (!isInChatWindow && isTextPhase && isAutoTaskRunning) {
+                Log.d(TAG, "已进入聊天界面,准备发送文字消息");
+                isInChatWindow = true;
+                taskState = TaskState.SENDING_MESSAGE;
+
+                // 延迟1秒后发送文字消息
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (currentTask != null && currentMessageIndex < currentTask.getMessages().size()) {
+                        SendTask.Message message = currentTask.getMessages().get(currentMessageIndex);
+                        if ("text".equals(message.getType())) {
+                            sendTextMessage(message.getContent());
+                        }
+                    }
+                }, 1000);
+            }
+        }
     }
 
     /**
@@ -609,10 +812,7 @@ public class WeChatAccessibilityService extends AccessibilityService {
             clickSearchResult(friendName);
         }, 4000);
 
-        // 4. 等待聊天界面加载完成后再发送消息
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            sendMessages();
-        }, 6000);
+        // 注意: 不在这里调用sendMessages(),由handleWindowStateChanged负责发送第一条消息
     }
 
     /**
@@ -781,34 +981,51 @@ public class WeChatAccessibilityService extends AccessibilityService {
                 return;
             }
 
-            // 查找聊天输入框 (通常在底部)
-            List<AccessibilityNodeInfo> editTexts = findNodesByClassName(rootNode, "android.widget.EditText");
-            if (editTexts != null && !editTexts.isEmpty()) {
-                // 使用最后一个EditText (通常聊天输入框在底部,搜索框在顶部)
-                AccessibilityNodeInfo chatEditText = editTexts.get(editTexts.size() - 1);
+            AccessibilityNodeInfo chatEditText = null;
 
-                if (chatEditText != null) {
-                    // 先点击输入框获取焦点
-                    chatEditText.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-
-                    Log.d(TAG, "找到聊天输入框,准备输入文字");
-
-                    // 延迟300ms后输入文本
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        Bundle arguments = new Bundle();
-                        arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-                        chatEditText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
-
-                        Log.d(TAG, "输入文字消息成功: " + text);
-
-                        // 延迟800ms后点击发送按钮
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            clickSendButton();
-                        }, 800);
-                    }, 300);
-
-                    return;
+            // 方法1: 通过resource-id查找聊天输入框 (最准确)
+            List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/bkn");
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    if ("android.widget.EditText".equals(node.getClassName())) {
+                        chatEditText = node;
+                        Log.d(TAG, "找到聊天输入框 (通过resource-id)");
+                        break;
+                    }
                 }
+            }
+
+            // 方法2: 如果方法1失败,使用最后一个EditText
+            if (chatEditText == null) {
+                List<AccessibilityNodeInfo> editTexts = findNodesByClassName(rootNode, "android.widget.EditText");
+                if (editTexts != null && !editTexts.isEmpty()) {
+                    chatEditText = editTexts.get(editTexts.size() - 1);
+                    Log.d(TAG, "找到聊天输入框 (通过最后一个EditText)");
+                }
+            }
+
+            if (chatEditText != null) {
+                // 先点击输入框获取焦点
+                chatEditText.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+
+                Log.d(TAG, "准备输入文字: " + text);
+
+                // 延迟300ms后输入文本
+                AccessibilityNodeInfo finalChatEditText = chatEditText;
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    Bundle arguments = new Bundle();
+                    arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                    finalChatEditText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+
+                    Log.d(TAG, "输入文字消息成功: " + text);
+
+                    // 延迟800ms后点击发送按钮
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        clickSendButton();
+                    }, 800);
+                }, 300);
+
+                return;
             }
 
             Log.w(TAG, "未找到聊天输入框");
@@ -836,6 +1053,14 @@ public class WeChatAccessibilityService extends AccessibilityService {
                     if (node.isClickable() && "android.widget.Button".equals(node.getClassName())) {
                         node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                         Log.d(TAG, "点击发送按钮成功 (通过resource-id)");
+
+                        // 当前消息发送完成,标记为已发送
+                        sentMessageIndices.add(currentMessageIndex);
+
+                        // 延迟1秒后继续下一条消息
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            continueNextMessage();
+                        }, 1000);
                         return;
                     }
                 }
@@ -849,6 +1074,14 @@ public class WeChatAccessibilityService extends AccessibilityService {
                     if (text != null && "发送".equals(text.toString()) && node.isClickable()) {
                         node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                         Log.d(TAG, "点击发送按钮成功 (通过text)");
+
+                        // 当前消息发送完成,标记为已发送
+                        sentMessageIndices.add(currentMessageIndex);
+
+                        // 延迟1秒后继续下一条消息
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            continueNextMessage();
+                        }, 1000);
                         return;
                     }
                 }
@@ -862,19 +1095,88 @@ public class WeChatAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * 发送图片消息 (暂未实现)
+     * 发送图片消息 (使用Intent分享)
      */
     private void sendImageMessage(String imagePath) {
-        Log.d(TAG, "发送图片消息: " + imagePath + " (功能开发中)");
-        // TODO: 实现图片发送功能
+        Log.d(TAG, "发送图片消息: " + imagePath);
+        shareFileToWechat(imagePath, "image/*");
     }
 
     /**
-     * 发送视频消息 (暂未实现)
+     * 发送视频消息 (使用Intent分享)
      */
     private void sendVideoMessage(String videoPath) {
-        Log.d(TAG, "发送视频消息: " + videoPath + " (功能开发中)");
-        // TODO: 实现视频发送功能
+        Log.d(TAG, "发送视频消息: " + videoPath);
+        shareFileToWechat(videoPath, "video/*");
+    }
+
+    /**
+     * 通过Intent分享文件给微信
+     */
+    private void shareFileToWechat(String filePath, String mimeType) {
+        Log.d(TAG, "========== 开始分享文件 ==========");
+        Log.d(TAG, "文件路径: " + filePath);
+        Log.d(TAG, "MIME类型: " + mimeType);
+
+        try {
+            java.io.File file = new java.io.File(filePath);
+            Log.d(TAG, "文件是否存在: " + file.exists());
+            Log.d(TAG, "文件是否可读: " + file.canRead());
+            Log.d(TAG, "文件大小: " + file.length() + " bytes");
+
+            if (!file.exists()) {
+                Log.e(TAG, "文件不存在: " + filePath);
+                // 继续发送下一条消息
+                currentMessageIndex++;
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    sendNextMessage();
+                }, 1000);
+                return;
+            }
+
+            Log.d(TAG, "开始获取FileProvider Uri...");
+            // 使用FileProvider获取Uri
+            android.net.Uri fileUri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "com.wechat.auto.fileprovider",
+                file
+            );
+            Log.d(TAG, "FileProvider Uri: " + fileUri.toString());
+
+            // 创建分享Intent
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType(mimeType);
+            shareIntent.setPackage(WECHAT_PACKAGE);
+            shareIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            // 保存当前要分享的好友名称
+            currentShareFriendName = currentTask.getFriendNames().get(currentFriendIndex);
+            currentShareFilePath = filePath;
+            isInShareMode = true;
+            taskState = TaskState.SHARING_FILE;
+
+            Log.d(TAG, "启动分享Intent,目标好友: " + currentShareFriendName);
+            Log.d(TAG, "Intent包名: " + WECHAT_PACKAGE);
+            Log.d(TAG, "Intent Flags: " + shareIntent.getFlags());
+
+            // 启动分享
+            startActivity(shareIntent);
+            Log.d(TAG, "startActivity() 调用成功");
+
+        } catch (Exception e) {
+            Log.e(TAG, "========== 分享文件失败 ==========");
+            Log.e(TAG, "错误类型: " + e.getClass().getName());
+            Log.e(TAG, "错误信息: " + e.getMessage(), e);
+            isInShareMode = false;
+
+            // 继续发送下一条消息
+            currentMessageIndex++;
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                sendNextMessage();
+            }, 1000);
+        }
     }
 
     /**
@@ -944,6 +1246,208 @@ public class WeChatAccessibilityService extends AccessibilityService {
         }
 
         return result;
+    }
+
+    /**
+     * 处理Android分享选择器
+     */
+    private void handleShareChooser(AccessibilityEvent event) {
+        Log.d(TAG, "检测到分享选择器");
+
+        // 延迟500ms后点击"发送给朋友"
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            clickSendToFriend();
+        }, 500);
+    }
+
+    /**
+     * 点击"发送给朋友"选项
+     */
+    private void clickSendToFriend() {
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        if (rootNode == null) {
+            Log.e(TAG, "无法获取根节点");
+            return;
+        }
+
+        // 查找"发送给朋友"文本
+        List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText("发送给朋友");
+        if (nodes != null && !nodes.isEmpty()) {
+            for (AccessibilityNodeInfo node : nodes) {
+                // 查找可点击的父节点
+                AccessibilityNodeInfo clickableNode = findClickableParent(node);
+                if (clickableNode != null) {
+                    boolean clicked = clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    Log.d(TAG, "点击'发送给朋友': " + (clicked ? "成功" : "失败"));
+                    if (clicked) {
+                        // 设置为分享模式,等待微信分享界面打开
+                        isInShareMode = true;
+                        return;
+                    }
+                }
+            }
+        }
+
+        Log.e(TAG, "未找到'发送给朋友'选项");
+    }
+
+    /**
+     * 处理分享界面事件
+     */
+    private void handleShareEvent(AccessibilityEvent event) {
+        int eventType = event.getEventType();
+
+        // 只处理窗口状态变化和内容变化
+        if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            return;
+        }
+
+        Log.d(TAG, "处理分享界面事件");
+
+        // 延迟1秒后尝试搜索好友
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            searchFriendInShareDialog();
+        }, 1000);
+    }
+
+    /**
+     * 在分享对话框中搜索好友
+     */
+    private void searchFriendInShareDialog() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找搜索框
+            List<AccessibilityNodeInfo> searchBoxes = rootNode.findAccessibilityNodeInfosByText("搜索");
+            if (searchBoxes.isEmpty()) {
+                // 尝试通过EditText查找
+                searchBoxes = findNodesByClassName(rootNode, "android.widget.EditText");
+            }
+
+            if (!searchBoxes.isEmpty()) {
+                AccessibilityNodeInfo searchBox = searchBoxes.get(0);
+
+                // 点击搜索框获取焦点
+                searchBox.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                searchBox.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+
+                Log.d(TAG, "找到搜索框,准备输入好友名称");
+
+                // 延迟500ms后输入好友名称
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    Bundle arguments = new Bundle();
+                    arguments.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                        currentShareFriendName
+                    );
+                    searchBox.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+
+                    Log.d(TAG, "输入好友名称: " + currentShareFriendName);
+
+                    // 延迟1秒后点击搜索结果
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        clickSearchResultInShareDialog();
+                    }, 1000);
+                }, 500);
+
+                return;
+            }
+
+            Log.w(TAG, "未找到搜索框");
+
+        } catch (Exception e) {
+            Log.e(TAG, "搜索好友失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 点击分享对话框中的搜索结果
+     */
+    private void clickSearchResultInShareDialog() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找好友名称
+            List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText(currentShareFriendName);
+            if (!nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    AccessibilityNodeInfo clickableNode = findClickableParent(node);
+                    if (clickableNode != null) {
+                        clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击搜索结果: " + currentShareFriendName);
+
+                        // 延迟1秒后点击发送按钮
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            clickSendButtonInShareDialog();
+                        }, 1000);
+
+                        return;
+                    }
+                }
+            }
+
+            Log.w(TAG, "未找到搜索结果: " + currentShareFriendName);
+
+        } catch (Exception e) {
+            Log.e(TAG, "点击搜索结果失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 点击分享对话框中的发送按钮
+     */
+    private void clickSendButtonInShareDialog() {
+        try {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode == null) {
+                Log.e(TAG, "无法获取根节点");
+                return;
+            }
+
+            // 查找"发送"或"分享"按钮
+            List<AccessibilityNodeInfo> sendButtons = rootNode.findAccessibilityNodeInfosByText("发送");
+            if (sendButtons.isEmpty()) {
+                sendButtons = rootNode.findAccessibilityNodeInfosByText("分享");
+            }
+
+            if (!sendButtons.isEmpty()) {
+                for (AccessibilityNodeInfo button : sendButtons) {
+                    if (button.isClickable()) {
+                        button.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        Log.d(TAG, "点击发送按钮成功");
+
+                        // 分享完成,退出分享模式
+                        isInShareMode = false;
+                        currentShareFriendName = null;
+                        currentShareFilePath = null;
+
+                        // 当前消息发送完成,索引+1
+                        currentMessageIndex++;
+
+                        // 延迟2秒后继续下一条消息
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            processNextMessage();
+                        }, 2000);
+
+                        return;
+                    }
+                }
+            }
+
+            Log.w(TAG, "未找到发送按钮");
+
+        } catch (Exception e) {
+            Log.e(TAG, "点击发送按钮失败: " + e.getMessage(), e);
+        }
     }
 }
 
